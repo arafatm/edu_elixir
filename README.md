@@ -1,4 +1,4 @@
-# Elixir official Mix & OTP Guide](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html)
+# [Elixir official Mix & OTP Guide](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html)
 
 ## Intro to MIX
 
