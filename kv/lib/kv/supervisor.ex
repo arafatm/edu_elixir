@@ -8,7 +8,8 @@ defmodule KV.Supervisor do
   # callback invoked to start supervisor and during hot code upgrades
   def init(:ok) do
     children = [
-      worker(KV.Registry, [KV.Registry])
+      worker(KV.Registry, [KV.Registry]),
+      supervisor(KV.Bucket.Supervisor, [])
     ]
 
     supervise(children, strategy: :one_for_one)
