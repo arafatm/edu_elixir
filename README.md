@@ -200,6 +200,8 @@ Also generated a `lib/kv.ex` as a starting point
 
 ## State
 
+### 
+
 Elixir is **immutable**. To share state we need **buckets** via:
 - Processes
 - ETS
@@ -278,9 +280,140 @@ The registry may become stale if a bucket stops or crashes
 - The test fails since the bucket remains in registry even after we stop the bucket process
 - To fix, we need registry to monitor every spawned bucket
 
-### call, cast or info?
+:shipit: [genserver](https://github.com/arafatm/edu_elixir/commit/8629cda)
+- `handle_info({:DOWN, ...}, ...)` handles Genserver brought down
+- `handle_info(_msg, state)` discards unknown messages
+
 ### Monitors or links?
+
+**Links** are bi-directional, if one side crashes so does the other
+
+**Monitors** are uni-directional. Monitor will receive notifications of monitored process.
+
+:boom: In the code above it's a **bad idea** since we monitor **and link** the process which would crash it.
+
 ## Supervisor and Application
+
+###
+
+**Let it Crash**. We don't rescue errors. The supervisor restarts the registry when needed
+
+### Our first supervisor
+
+[HexDoc: Supervisor](https://hexdocs.pm/elixir/Supervisor.html)
+
+:shipit: [First Supervisor](https://github.com/arafatm/edu_elixir/commit/30bd31d)
+- In `init`, we start a child `worker(KV.Registry, [KV.Registry])` which starts a process using `KV.Registry.start_link(KV.Registry)`
+- The name of the process will be `KV.Registry` so it can be restarted by name since the pid will change
+- `supervise/2` is called to start the supervision process with a `:one_for_one` strategy
+- `:one_for_one` implies if the child crashes then only this child will be restarted
+
+
+:shipit: [Update KV.Registry to start with a name](https://github.com/arafatm/edu_elixir/commit/f86e32e)
+
+To test
+```elixir
+KV.Supervisor.start_link                    # {:ok, #PID<0.66.0>}
+KV.Registry.create(KV.Registry, "shopping") # :ok
+KV.Registry.lookup(KV.Registry, "shopping") # {:ok, #PID<0.70.0>}
+```
+
+We can create buckets without manually starting registry workers
+
+### Understanding applications
+
+When `mix compile` a `.app` file is generated in `_build/dev/lib/kv/ebin/kv.app`
+- `iex -S mi` automatically start our application by calling `Application.start(:kv)`
+
+### The application callback
+
+:shipit: [Application start KV.Supervisor](https://github.com/arafatm/edu_elixir/commit/4548fad)
+- Auto starts KV.Supervisor
+
+To test
+```elixir
+KV.Registry.create(KV.Registry, "shopping") # :ok
+KV.Registry.lookup(KV.Registry, "shopping") # {:ok, #PID<0.88.0>}
+```
+
+### Projects or applications?
+
+Mix manages **project**
+
+**Applicaitons** are OTP; entities started and stopped as a whole by runtime
+
+See [docs for the Application module](https://hexdocs.pm/elixir/Application.html)
+
+
+### Simple one for one supervisors
+
+In `KV.Registry` we have the following code:
+```elixir
+{:ok, pid} = KV.Bucket.start_link
+ref = Process.monitor(pid)
+```
+
+This starts a link => crashing bucket will crash registry.
+- supervisor will restart registry
+- but we lose bucket data
+
+:shipit: [test registry crash](https://github.com/arafatm/edu_elixir/commit/276a2ca)
+- sent a `:shutdown` to bucket to ensure crash
+- test fails because the bucket crash causes registry to crash i.e. no longer available in test
+
+Using `:simple_one_for_one` strategy allows supervision of many children
+- no workers are started during supervisor initialization
+
+:shipit: [simple_one_for_one bucket supervisor](https://github.com/arafatm/edu_elixir/commit/0399bc5)
+- defined `start_bucket/0` to start bucket as child of this supervisor
+- `start_bucket` to be invoked instead of `KV.Bucket.start_link`
+- in `init` we mark worker as `:temporary` => bucket will not be restarted.
+
+:shipit: [Registry uses new KV.Bucket.Supervisor](https://github.com/arafatm/edu_elixir/commit/dc43b09)
+- tests will fail since bucket supervisor has not been started
+- need to start KV.Bucket.Supervisor as part of main **supervision tree**
+
+### Supervision trees
+
+:shipit: [Add KV.Bucket.Supervisor to main supervisor children](https://github.com/arafatm/edu_elixir/commit/f70840e)
+- tests now pass
+
+`:one_for_one` isn't sufficient; If `KV.Registry` dies all information linking
+`KV.Bucket` names to procs are lost. At this point we must kill
+`KV.Bucket.Supervisor`
+
+`:one_for_all` strategy will kill and restart all children procs. *Too heavy handed*
+
+`:rest_for_one` strategy allows supervisor to kill and restart child procs started **after** crashed child
+
+:shipit: [KV.Supervisor uses :rest_for_one strategy](https://github.com/arafatm/edu_elixir/commit/5dfedcb)
+
+:boom: [Supervisor Cheat Sheet](https://raw.githubusercontent.com/benjamintanweihao/elixir-cheatsheets/master/Supervisor_CheatSheet.pdf)
+
+### Observer
+
+In `iex -S mix` run `:observer.start` to start GUI observer
+- Go to "Applications" -> "kv" to view supervision tree
+
+To experiment
+```elixir
+:observer.start # start gui observer
+
+KV.Registry.create KV.Registry, "shopping" # starts shopping registry
+
+{:ok, pid} = KV.Registry.lookup(KV.Registry, "shopping") 
+
+KV.Bucket.put(pid, "eggs", 3)
+
+KV.Bucket.get(pid, "eggs")
+
+```
+
+### Shared state in tests
+
+In `test/kv/registry_test.ex` we created a shared registry in `setup context` for all tests.
+- This is ok if don't need to isolate test e.g. by calling `Supervisor.count_children(KV.Bucket.Supervisor)
+
 ## ETS
 ## Dependencies and umbrella apps
 ## Task and gen-tcp
