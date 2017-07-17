@@ -52,7 +52,6 @@ defmodule KV.Registry do
       {:ok, pid} = KV.Bucket.start_link
       ref = Process.monitor(pid)
       refs = Map.put(refs, ref, name)
-      IO.puts "handle_cast #{inspect refs}"
       names = Map.put(names, name, pid)
       {:noreply, {names, refs}}
     end
