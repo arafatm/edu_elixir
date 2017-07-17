@@ -239,6 +239,47 @@ Agent.stop(agent)
 - The second `Process` puts server to sleep
 
 ## GenServer
+
+### 
+
+We can name buckets with `Agent.start_link(fn -> %{} end, name: shopping)` but **not a good idea**
+- atoms are **not garbage collected**
+- instead we can create a **registry process** that holds a map associating bucket name to process
+- registry needs to **monitor** each bucket to clean up stale entries
+
+### Our first GenServer
+
+**GenServer** has client API and server callbacks
+
+:shipit: [GenServer implementation](https://github.com/arafatm/edu_elixir/commit/f1b774a)
+
+In `start_link\3`
+- `__MODULE__` = _this_ module will implement server callbacks
+- calls `init` and blocks until complete
+- `init` sets up the state
+
+GenServer must implement `init` and return `{:ok, somestate}`
+
+GenServer has 2 request types:
+- `call` is synchronous and **must return** a response
+- `cast` is asynchronous with no response
+
+On the client API
+- `lookup` calls `handle_call({:lookup ...`
+- `create` casts `handle_cast({:create ...`
+
+`def stop` is used to stop GenServer. Not used in our tests because an implicit `:shutdown` signal is sent
+
+### The need for monitoring
+
+The registry may become stale if a bucket stops or crashes
+
+:shipit: [stale registry](https://github.com/arafatm/edu_elixir/commit/d114d93)
+- The test fails since the bucket remains in registry even after we stop the bucket process
+- To fix, we need registry to monitor every spawned bucket
+
+### call, cast or info?
+### Monitors or links?
 ## Supervisor and Application
 ## ETS
 ## Dependencies and umbrella apps
